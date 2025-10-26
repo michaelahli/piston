@@ -1,14 +1,16 @@
-version: '3.2'
+version: "3.2"
 
 services:
-    api:
-        image: ghcr.io/engineer-man/piston
-        container_name: piston_api
-        restart: always
-        privileged: true
-        ports:
-            - 2000:2000
-        volumes:
-            - ./data/piston/packages:/piston/packages
-        tmpfs:
-            - /tmp:exec
+  api:
+    image: ghcr.io/engineer-man/piston
+    container_name: piston_api
+    restart: always
+    privileged: true
+    environment:
+      - PISTON_DISABLE_NETWORKING=false
+    ports:
+      - 2000:2000
+    volumes:
+      - ./data/piston/packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
