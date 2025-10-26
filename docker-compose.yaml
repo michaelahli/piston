@@ -8,6 +8,7 @@ services:
     privileged: true
     environment:
       - PISTON_DISABLE_NETWORKING=false
+      - PISTON_OUTPUT_MAX_SIZE=1048576
     ports:
       - 2000:2000
     volumes:
