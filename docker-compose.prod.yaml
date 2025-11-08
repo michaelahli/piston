@@ -1,0 +1,21 @@
+version: "3.2"
+
+services:
+  api:
+    build: api
+    container_name: piston_api
+    privileged: true
+    restart: always
+    ports:
+      - 2000:2000
+    volumes:
+      - ./data/piston/packages:/piston/packages
+
+  repo:
+    build: repo
+    container_name: piston_repo
+    command: ["--no-build"]
+    volumes:
+      - .:/piston
+    ports:
+      - 2001:8000
