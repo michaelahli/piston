@@ -53,16 +53,13 @@ class QueueManager {
   }
 
   updateQueueMetrics() {
-    // Update queue length
     queueMetrics.updateQueueLength(this.jobQueue.length);
 
-    // Update active jobs metrics with correct labels
     jobMetrics.activeJobs.set({ language: '', version: '', state: 'queued' }, this.jobQueue.length);
     jobMetrics.activeJobs.set({ language: '', version: '', state: 'available' }, this.remainingJobSpaces);
   }
 
   updateJobStateMetrics() {
-    // Active jobs count
     jobMetrics.activeJobs.set({ language: '', version: '', state: 'active' }, this.activeJobs.size);
   }
 

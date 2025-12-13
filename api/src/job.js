@@ -445,7 +445,6 @@ class Job {
         })
       );
 
-      this.metrics.cleanup();
       this.metrics.recordDuration('cleanup', 'completed');
       this.metrics.updateJobsPerSecond('cleanup');
 
