@@ -5,7 +5,10 @@ const path = require('path');
 const config = require('./config');
 const fs = require('fs/promises');
 const globals = require('./globals');
-const { jobMetrics } = require('./metrics');
+const queueManager = require('./queue-manager');
+const { MetricsRecorder } = require('./metrics-utils');
+
+const ISOLATE_PATH = '/usr/local/bin/isolate';
 
 const job_states = {
   READY: Symbol('Ready to be primed'),
@@ -13,17 +16,9 @@ const job_states = {
   EXECUTED: Symbol('Executed and ready for cleanup'),
 };
 
-const MAX_BOX_ID = 999;
-const ISOLATE_PATH = '/usr/local/bin/isolate';
-let box_id = 0;
-
-let remaining_job_spaces = config.max_concurrent_jobs;
-let job_queue = [];
-
-const get_next_box_id = () => ++box_id % MAX_BOX_ID;
-
 class Job {
   #dirty_boxes;
+
   constructor({
     runtime,
     files,
@@ -34,10 +29,9 @@ class Job {
     memory_limits,
   }) {
     this.uuid = uuidv4();
-
     this.logger = logplease.create(`job/${this.uuid}`);
-
     this.runtime = runtime;
+
     this.files = files.map((file, i) => ({
       name: file.name || `file${i}.code`,
       content: file.content,
@@ -48,7 +42,6 @@ class Job {
 
     this.args = args;
     this.stdin = stdin;
-    // Add a trailing newline if it doesn't exist
     if (this.stdin.slice(-1) !== '\n') {
       this.stdin += '\n';
     }
@@ -59,14 +52,14 @@ class Job {
 
     this.state = job_states.READY;
     this.#dirty_boxes = [];
-
-    this.metrics = jobMetrics;
-    this.startTime = {};
+    this.metrics = new MetricsRecorder(this);
+    this.box = null;
   }
 
   async #create_isolate_box() {
-    const box_id = get_next_box_id();
+    const box_id = queueManager.getNextBoxId();
     const metadata_file_path = `/tmp/${box_id}-metadata.txt`;
+
     return new Promise((res, rej) => {
       cp.exec(
         `isolate --init --cg -b${box_id}`,
@@ -92,33 +85,40 @@ class Job {
   }
 
   async prime() {
-    this.metrics.activeJobs.inc({ state: 'priming' });
+    this.metrics.startTimer('prime');
+    this.metrics.incrementCounter('active_jobs', { state: 'priming' });
 
-    const startTime = Date.now();
     try {
+      const queuePromise = queueManager.waitForJobSlot(
+        this.uuid,
+        this.runtime.language,
+        this.runtime.version.raw
+      );
 
-      if (remaining_job_spaces < 1) {
+      if (queuePromise) {
         this.logger.info(`Awaiting job slot`);
-        await new Promise(resolve => {
-          job_queue.push(resolve);
-        });
+        await queuePromise;
       }
-      this.logger.info(`Priming job`);
-      remaining_job_spaces--;
-      this.logger.debug('Running isolate --init');
-      const box = await this.#create_isolate_box();
 
-      this.logger.debug(`Creating submission files in Isolate box`);
-      const submission_dir = path.join(box.dir, 'submission');
+      queueManager.allocateJobSlot(this.uuid);
+
+      this.logger.info(`Priming job`);
+      this.logger.debug('Running isolate --init');
+
+      this.box = await this.#create_isolate_box();
+
+      const submission_dir = path.join(this.box.dir, 'submission');
       await fs.mkdir(submission_dir);
+
       for (const file of this.files) {
         const file_path = path.join(submission_dir, file.name);
         const rel = path.relative(submission_dir, file_path);
 
-        if (rel.startsWith('..'))
+        if (rel.startsWith('..')) {
           throw Error(
             `File path "${file.name}" tries to escape parent directory: ${rel}`
           );
+        }
 
         const file_content = Buffer.from(file.content, file.encoding);
 
@@ -130,35 +130,22 @@ class Job {
       }
 
       this.state = job_states.PRIMED;
-
       this.logger.debug('Primed job');
-      const duration = (Date.now() - startTime) / 1000;
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'prime', status: 'success' },
-        duration
-      );
 
-      return box;
+      this.metrics.recordDuration('prime', 'success');
+
     } catch (error) {
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'prime', status: 'error' },
-        (Date.now() - startTime) / 1000
-      );
+      this.metrics.recordDuration('prime', 'error');
       throw error;
     } finally {
-      this.metrics.activeJobs.dec({ state: 'priming' });
+      this.metrics.decrementCounter('active_jobs', { state: 'priming' });
     }
   }
 
-  async safe_call(
-    box,
-    file,
-    args,
-    timeout,
-    cpu_time,
-    memory_limit,
-    event_bus = null
-  ) {
+  async safe_call(file, args, timeout, cpu_time, memory_limit, event_bus = null) {
+    const stage = file === 'compile' ? 'compile' : 'run';
+    this.metrics.startTimer(stage);
+
     let stdout = '';
     let stderr = '';
     let output = '';
@@ -170,16 +157,13 @@ class Job {
     let cpu_time_stat = null;
     let wall_time_stat = null;
 
-    const stage = file === 'compile' ? 'compile' : 'run';
-    const startTime = Date.now();
-
     try {
       const proc = cp.spawn(
         ISOLATE_PATH,
         [
           '--run',
-          `-b${box.id}`,
-          `--meta=${box.metadata_file_path}`,
+          `-b${this.box.id}`,
+          `--meta=${this.box.metadata_file_path}`,
           '--cg',
           '-s',
           '-c',
@@ -206,9 +190,7 @@ class Job {
           path.join(this.runtime.pkgdir, file),
           ...args,
         ],
-        {
-          stdio: 'pipe',
-        }
+        { stdio: 'pipe' }
       );
 
       if (event_bus === null) {
@@ -228,21 +210,14 @@ class Job {
       proc.stderr.on('data', async data => {
         if (event_bus !== null) {
           event_bus.emit('stderr', data);
-        } else if (
-          stderr.length + data.length >
-          this.runtime.output_max_size
-        ) {
+        } else if (stderr.length + data.length > this.runtime.output_max_size) {
           message = 'stderr length exceeded';
           status = 'EL';
           this.logger.info(message);
           try {
             process.kill(proc.pid, 'SIGABRT');
           } catch (e) {
-            // Could already be dead and just needs to be waited on
-            this.logger.debug(
-              `Got error while SIGABRTing process ${proc}:`,
-              e
-            );
+            this.logger.debug(`Got error while SIGABRTing process ${proc}:`, e);
           }
         } else {
           stderr += data;
@@ -253,21 +228,14 @@ class Job {
       proc.stdout.on('data', async data => {
         if (event_bus !== null) {
           event_bus.emit('stdout', data);
-        } else if (
-          stdout.length + data.length >
-          this.runtime.output_max_size
-        ) {
+        } else if (stdout.length + data.length > this.runtime.output_max_size) {
           message = 'stdout length exceeded';
           status = 'OL';
           this.logger.info(message);
           try {
             process.kill(proc.pid, 'SIGABRT');
           } catch (e) {
-            // Could already be dead and just needs to be waited on
-            this.logger.debug(
-              `Got error while SIGABRTing process ${proc}:`,
-              e
-            );
+            this.logger.debug(`Got error while SIGABRTing process ${proc}:`, e);
           }
         } else {
           stdout += data;
@@ -277,41 +245,33 @@ class Job {
 
       const data = await new Promise((res, rej) => {
         proc.on('exit', (_, signal) => {
-          res({
-            signal,
-          });
+          res({ signal });
         });
 
         proc.on('error', err => {
-          rej({
-            error: err,
-          });
+          rej({ error: err });
         });
       });
 
       try {
-        const metadata_str = (
-          await fs.read_file(box.metadata_file_path)
-        ).toString();
+        const metadata_str = (await fs.read_file(this.box.metadata_file_path)).toString();
         const metadata_lines = metadata_str.split('\n');
         for (const line of metadata_lines) {
           if (!line) continue;
 
           const [key, value] = line.split(':');
           if (key === undefined || value === undefined) {
-            throw new Error(
-              `Failed to parse metadata file, received: ${line}`
-            );
+            throw new Error(`Failed to parse metadata file, received: ${line}`);
           }
           switch (key) {
             case 'cg-mem':
-              memory = parse_int(value) * 1000;
+              memory = parseInt(value) * 1000;
               break;
             case 'exitcode':
-              code = parse_int(value);
+              code = parseInt(value);
               break;
             case 'exitsig':
-              signal = globals.SIGNALS[parse_int(value)] ?? null;
+              signal = globals.SIGNALS[parseInt(value)] ?? null;
               break;
             case 'message':
               message = message || value;
@@ -320,10 +280,10 @@ class Job {
               status = status || value;
               break;
             case 'time':
-              cpu_time_stat = parse_float(value) * 1000;
+              cpu_time_stat = parseFloat(value) * 1000;
               break;
             case 'time-wall':
-              wall_time_stat = parse_float(value) * 1000;
+              wall_time_stat = parseFloat(value) * 1000;
               break;
             default:
               break;
@@ -331,37 +291,12 @@ class Job {
         }
       } catch (e) {
         throw new Error(
-          `Error reading metadata file: ${box.metadata_file_path}\nError: ${e.message}\nIsolate run stdout: ${stdout}\nIsolate run stderr: ${stderr}`
+          `Error reading metadata file: ${this.box.metadata_file_path}\nError: ${e.message}\nIsolate run stdout: ${stdout}\nIsolate run stderr: ${stderr}`
         );
       }
 
-      if (cpu_time_stat !== null) {
-        this.metrics.jobCpuTime.set(
-          { language: this.runtime.language, version: this.runtime.version.raw, stage: stage, job_id: this.uuid },
-          cpu_time_stat / 1000
-        );
-      }
-
-      if (wall_time_stat !== null) {
-        this.metrics.jobWallTime.set(
-          { language: this.runtime.language, version: this.runtime.version.raw, stage: stage, job_id: this.uuid },
-          wall_time_stat / 1000
-        );
-      }
-
-      if (memory !== null) {
-        this.metrics.jobMemoryUsage.set(
-          { language: this.runtime.language, version: this.runtime.version.raw, stage: stage, job_id: this.uuid },
-          memory
-        );
-      }
-
-      const duration = (Date.now() - startTime) / 1000;
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: stage, status: data.status || 'completed' },
-        duration
-      );
-
+      this.metrics.recordResourceUsage(stage, memory, cpu_time_stat, wall_time_stat);
+      this.metrics.recordDuration(stage, status || 'completed');
 
       return {
         ...data,
@@ -378,40 +313,25 @@ class Job {
       };
 
     } catch (error) {
-      const duration = (Date.now() - startTime) / 1000;
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: stage, status: 'error' },
-        duration
-      );
+      this.metrics.recordDuration(stage, 'error');
       throw error;
     }
-
   }
 
-  async execute(box, event_bus = null) {
-    this.metrics.activeJobs.inc({ state: 'executing' });
-    this.metrics.jobExecutions.inc({
-      language: this.runtime.language,
-      version: this.runtime.version.raw,
-      status: 'started'
-    });
-
-    const executeStartTime = Date.now();
-    if (this.state !== job_states.PRIMED) {
-      throw new Error(
-        'Job must be in primed state, current state: ' +
-        this.state.toString()
-      );
-    }
+  async execute(event_bus = null) {
+    this.metrics.startTimer('total');
+    this.metrics.startTimer('execute');
+    this.metrics.incrementCounter('active_jobs', { state: 'executing' });
+    this.metrics.incrementCounter('executions', { status: 'started' });
 
     try {
+      if (this.state !== job_states.PRIMED) {
+        throw new Error('Job must be in primed state, current state: ' + this.state.toString());
+      }
+
       this.logger.info(`Executing job runtime=${this.runtime.toString()}`);
-
-      const code_files =
-        (this.runtime.language === 'file' && this.files) ||
+      const code_files = (this.runtime.language === 'file' && this.files) ||
         this.files.filter(file => file.encoding == 'utf8');
-
-      this.logger.debug('Compiling');
 
       let compile;
       let compile_errored = false;
@@ -424,11 +344,7 @@ class Job {
           : {
             emit_event_bus_result: (stage, result) => {
               const { error, code, signal } = result;
-              event_bus.emit('exit', stage, {
-                error,
-                code,
-                signal,
-              });
+              event_bus.emit('exit', stage, { error, code, signal });
             },
             emit_event_bus_stage: stage => {
               event_bus.emit('stage', stage);
@@ -439,7 +355,6 @@ class Job {
         this.logger.debug('Compiling');
         emit_event_bus_stage('compile');
         compile = await this.safe_call(
-          box,
           'compile',
           code_files.map(x => x.name),
           this.timeouts.compile,
@@ -449,12 +364,13 @@ class Job {
         );
         emit_event_bus_result('compile', compile);
         compile_errored = compile.code !== 0;
+
         if (!compile_errored) {
-          const old_box_dir = box.dir;
-          box = await this.#create_isolate_box();
+          const old_box = this.box;
+          this.box = await this.#create_isolate_box();
           await fs.rename(
-            path.join(old_box_dir, 'submission'),
-            path.join(box.dir, 'submission')
+            path.join(old_box.dir, 'submission'),
+            path.join(this.box.dir, 'submission')
           );
         }
       }
@@ -464,7 +380,6 @@ class Job {
         this.logger.debug('Running');
         emit_event_bus_stage('run');
         run = await this.safe_call(
-          box,
           'run',
           [code_files[0].name, ...this.args],
           this.timeouts.run,
@@ -476,13 +391,10 @@ class Job {
       }
 
       this.state = job_states.EXECUTED;
-
-      this.metrics.jobExecutions.inc({
-        language: this.runtime.language,
-        version: this.runtime.version.raw,
-        status: 'success'
-      });
-
+      this.metrics.incrementCounter('executions', { status: 'success' });
+      this.metrics.recordDuration('execute', 'success');
+      this.metrics.recordDuration('total', 'success');
+      this.metrics.updateJobsPerSecond('execution');
 
       return {
         compile,
@@ -490,36 +402,27 @@ class Job {
         language: this.runtime.language,
         version: this.runtime.version.raw,
       };
+
     } catch (error) {
-      this.metrics.jobExecutions.inc({
-        language: this.runtime.language,
-        version: this.runtime.version.raw,
-        status: 'failed'
-      });
+      this.metrics.incrementCounter('executions', { status: 'failed' });
+      this.metrics.recordDuration('execute', 'error');
+      this.metrics.recordDuration('total', 'error');
       throw error;
     } finally {
-      this.metrics.activeJobs.dec({ state: 'executing' });
-
-      const totalDuration = (Date.now() - executeStartTime) / 1000;
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'total', status: 'completed' },
-        totalDuration
-      );
+      this.metrics.decrementCounter('active_jobs', { state: 'executing' });
     }
-
   }
 
   async cleanup() {
-    this.metrics.activeJobs.inc({ state: 'cleaning' });
-    const startTime = Date.now();
+    this.metrics.startTimer('cleanup');
+    this.metrics.incrementCounter('active_jobs', { state: 'cleaning' });
 
     try {
       this.logger.info(`Cleaning up job`);
 
-      remaining_job_spaces++;
-      if (job_queue.length > 0) {
-        job_queue.shift()();
-      }
+      queueManager.releaseJobSlot(this.uuid);
+      queueManager.cleanupJobFromQueue(this.uuid);
+
       await Promise.all(
         this.#dirty_boxes.map(async box => {
           cp.exec(
@@ -542,25 +445,17 @@ class Job {
         })
       );
 
-      this.metrics.jobMemoryUsage.remove(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'compile', job_id: this.uuid }
-      );
-      this.metrics.jobMemoryUsage.remove(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'run', job_id: this.uuid }
-      );
+      this.metrics.cleanup();
+      this.metrics.recordDuration('cleanup', 'completed');
+      this.metrics.updateJobsPerSecond('cleanup');
+
     } finally {
-
-      this.metrics.activeJobs.dec({ state: 'cleaning' });
-
-      const duration = (Date.now() - startTime) / 1000;
-      this.metrics.jobDuration.observe(
-        { language: this.runtime.language, version: this.runtime.version.raw, stage: 'cleanup', status: 'completed' },
-        duration
-      );
+      this.metrics.decrementCounter('active_jobs', { state: 'cleaning' });
     }
   }
 }
 
 module.exports = {
   Job,
+  job_states
 };

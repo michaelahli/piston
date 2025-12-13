@@ -11,7 +11,6 @@ const fss = require('fs');
 const body_parser = require('body-parser');
 const runtime = require('./runtime');
 const promClient = require('prom-client');
-const { jobMetrics } = require('./metrics');
 
 const logger = Logger.create('index');
 const app = express();
@@ -99,7 +98,6 @@ expressWs(app);
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      activeJobs: jobMetrics.activeJobs.hashMap['state:executing']?.value || 0
     });
   });
 
