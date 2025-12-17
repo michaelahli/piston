@@ -4,9 +4,7 @@ if (global.prometheusMetricsInitialized) {
   module.exports = global.prometheusMetrics;
 } else {
   promClient.register.clear();
-
-  const collectDefaultMetrics = promClient.collectDefaultMetrics;
-  collectDefaultMetrics({ timeout: 5000 });
+  promClient.collectDefaultMetrics({ timeout: 5000 });
 
   const jobMetrics = {
     jobDuration: new promClient.Histogram({
@@ -19,25 +17,25 @@ if (global.prometheusMetricsInitialized) {
     jobMemoryUsage: new promClient.Gauge({
       name: 'compiler_job_memory_bytes',
       help: 'Memory usage of jobs in bytes',
-      labelNames: ['language', 'version', 'stage', 'job_id', 'type']
+      labelNames: ['language', 'version', 'stage', 'type']
     }),
 
     compilerMemoryUsage: new promClient.Gauge({
       name: 'compiler_memory_bytes',
       help: 'Memory usage of compiler processes in bytes',
-      labelNames: ['language', 'version', 'job_id']
+      labelNames: ['language', 'version']
     }),
 
     jobCpuTime: new promClient.Gauge({
       name: 'compiler_cpu_time_seconds',
       help: 'CPU time used by jobs in seconds',
-      labelNames: ['language', 'version', 'stage', 'job_id']
+      labelNames: ['language', 'version', 'stage']
     }),
 
     jobWallTime: new promClient.Gauge({
       name: 'compiler_wall_time_seconds',
       help: 'Wall clock time for jobs in seconds',
-      labelNames: ['language', 'version', 'stage', 'job_id']
+      labelNames: ['language', 'version', 'stage']
     }),
 
     activeJobs: new promClient.Gauge({
@@ -89,47 +87,23 @@ if (global.prometheusMetricsInitialized) {
 
     endQueueTimer(jobId) {
       const timer = this.queueStartTimes.get(jobId);
-      if (timer) {
-        const waitTime = (Date.now() - timer.startTime) / 1000;
-        jobMetrics.jobQueueWaitTime.observe(
-          { language: timer.language, version: timer.version },
-          waitTime
-        );
-        this.queueStartTimes.delete(jobId);
-      }
+      if (!timer) return;
+
+      const waitTime = (Date.now() - timer.startTime) / 1000;
+      jobMetrics.jobQueueWaitTime.observe(
+        { language: timer.language, version: timer.version },
+        waitTime
+      );
+
+      this.queueStartTimes.delete(jobId);
     },
 
     updateQueueLength(queueLength) {
       jobMetrics.jobQueueLength.set(queueLength);
-    },
-
-    cleanupJobMetrics(jobId, language, version) {
-      jobMetrics.jobMemoryUsage.remove(
-        { language: language, version: version, stage: 'compile', job_id: jobId, type: 'execution' }
-      );
-      jobMetrics.jobMemoryUsage.remove(
-        { language: language, version: version, stage: 'run', job_id: jobId, type: 'execution' }
-      );
-      jobMetrics.compilerMemoryUsage.remove(
-        { language: language, version: version, job_id: jobId }
-      );
-      jobMetrics.jobCpuTime.remove(
-        { language: language, version: version, stage: 'compile', job_id: jobId }
-      );
-      jobMetrics.jobCpuTime.remove(
-        { language: language, version: version, stage: 'run', job_id: jobId }
-      );
-      jobMetrics.jobWallTime.remove(
-        { language: language, version: version, stage: 'compile', job_id: jobId }
-      );
-      jobMetrics.jobWallTime.remove(
-        { language: language, version: version, stage: 'run', job_id: jobId }
-      );
     }
   };
 
   global.prometheusMetricsInitialized = true;
   global.prometheusMetrics = { jobMetrics, queueMetrics };
-
   module.exports = global.prometheusMetrics;
 }

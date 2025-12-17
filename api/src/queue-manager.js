@@ -6,16 +6,16 @@ class QueueManager {
     this.maxConcurrentJobs = maxConcurrentJobs;
     this.remainingJobSpaces = maxConcurrentJobs;
     this.jobQueue = [];
+    this.activeJobs = new Set();
+
     this.boxId = 0;
     this.MAX_BOX_ID = 999;
-    this.activeJobs = new Set();
-    this.updateQueueMetrics();
-    jobMetrics.isolateBoxesInUse.set(0);
+
+    this.updateAllMetrics();
   }
 
   getNextBoxId() {
     this.boxId = (this.boxId + 1) % this.MAX_BOX_ID;
-    jobMetrics.isolateBoxesInUse.set(this.boxId);
     return this.boxId;
   }
 
@@ -24,68 +24,52 @@ class QueueManager {
       queueMetrics.startQueueTimer(jobId, language, version);
       return new Promise(resolve => {
         this.jobQueue.push({ resolve, jobId });
-        this.updateQueueMetrics();
+        this.updateAllMetrics();
       });
     }
     return null;
   }
 
   allocateJobSlot(jobId) {
-    if (this.remainingJobSpaces > 0) {
-      this.remainingJobSpaces--;
-      this.activeJobs.add(jobId);
-      this.updateJobStateMetrics();
-      queueMetrics.endQueueTimer(jobId);
-      return true;
-    }
-    return false;
+    if (this.remainingJobSpaces < 1) return false;
+
+    this.remainingJobSpaces--;
+    this.activeJobs.add(jobId);
+
+    this.updateAllMetrics();
+    queueMetrics.endQueueTimer(jobId);
+    return true;
   }
 
   releaseJobSlot(jobId) {
     this.remainingJobSpaces++;
     this.activeJobs.delete(jobId);
-    this.updateJobStateMetrics();
+
     if (this.jobQueue.length > 0) {
-      const nextJob = this.jobQueue.shift();
-      this.updateQueueMetrics();
-      nextJob.resolve();
+      const next = this.jobQueue.shift();
+      next.resolve();
     }
+
+    this.updateAllMetrics();
   }
 
-  updateQueueMetrics() {
-    queueMetrics.updateQueueLength(this.jobQueue.length);
+  updateAllMetrics() {
+    jobMetrics.jobQueueLength.set(this.jobQueue.length);
 
     jobMetrics.activeJobs.set({ language: '', version: '', state: 'queued' }, this.jobQueue.length);
-    jobMetrics.activeJobs.set({ language: '', version: '', state: 'available' }, this.remainingJobSpaces);
-  }
-
-  updateJobStateMetrics() {
     jobMetrics.activeJobs.set({ language: '', version: '', state: 'active' }, this.activeJobs.size);
+    jobMetrics.activeJobs.set(
+      { language: '', version: '', state: 'available' },
+      this.remainingJobSpaces
+    );
+
+    // 🔥 metric SEMANTIC BENER
+    jobMetrics.isolateBoxesInUse.set(this.activeJobs.size);
   }
 
-  getQueueStats() {
-    return {
-      queueLength: this.jobQueue.length,
-      activeJobs: this.activeJobs.size,
-      availableSlots: this.remainingJobSpaces,
-      maxConcurrentJobs: this.maxConcurrentJobs
-    };
-  }
-
-  cleanupJobFromQueue(jobId) {
-    const index = this.jobQueue.findIndex(item => item.jobId === jobId);
-    if (index > -1) {
-      this.jobQueue.splice(index, 1);
-      this.updateQueueMetrics();
-      queueMetrics.endQueueTimer(jobId);
-    }
-  }
-
-  updateJobsPerSecond(operation, count) {
-    jobMetrics.jobsPerSecond.set({ operation }, count);
+  updateJobsPerSecond(operation, rate) {
+    jobMetrics.jobsPerSecond.set({ operation }, rate);
   }
 }
 
-const queueManager = new QueueManager(config.max_concurrent_jobs || 10);
-
-module.exports = queueManager;
+module.exports = new QueueManager(config.max_concurrent_jobs || 10);
