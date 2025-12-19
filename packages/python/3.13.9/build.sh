@@ -25,4 +25,4 @@ bin/pip3 install \
   prophet hmmlearn cvxpy pulp simpy deap pygad riskfolio-lib sqlalchemy pymongo pyarrow \
   fastparquet polars celery apscheduler docker loguru tqdm joblib numba yfinance ccxt alpaca-trade-api \
   ib-insync requests aiohttp beautifulsoup4 lxml mlxtend quantlib finquant qstrader backtrader \
-  statsforecast pywavelets ruptures quantconnect backtesting quanttools ta-lib
+  statsforecast pywavelets ruptures quantconnect backtesting quanttools ta-lib minio
