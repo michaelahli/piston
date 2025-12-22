@@ -7,7 +7,7 @@ services:
     privileged: true
     restart: always
     ports:
-      - 2000:2000
+      - 2700:2000
     volumes:
       - ./data/piston/packages:/piston/packages
 
@@ -18,4 +18,4 @@ services:
     volumes:
       - .:/piston
     ports:
-      - 2001:8000
+      - 2780:8000
