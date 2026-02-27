@@ -1,0 +1,14 @@
+apiVersion: v2
+name: piston
+description: "Helm chart for deploying piston api and repo services"
+icon: https://raw.githubusercontent.com/engineer-man/piston/main/logo.png
+appVersion: "1.0"
+version: 0.1.0
+keywords:
+  - piston
+  - api
+  - repo
+  - deployment
+maintainers:
+  - name: engineer-man
+    email: you@example.com

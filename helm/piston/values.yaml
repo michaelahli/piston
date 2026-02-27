@@ -1,0 +1,36 @@
+# Default values for piston chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCountApi: 2
+
+image:
+  repositoryApi: "ghcr.io/michaelahli/piston-api"
+  repositoryRepo: "ghcr.io/michaelahli/piston-repo"
+  pullPolicy: IfNotPresent
+  tag: "v0.0.1"
+
+service:
+  api:
+    port: 2000
+    targetPort: 2000
+    type: ClusterIP
+  repo:
+    port: 8000
+    targetPort: 8000
+    type: ClusterIP
+
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  sizeApi: 50Gi
+  sizeRepo: 50Gi
+
+resources:
+  api: {}
+  repo: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

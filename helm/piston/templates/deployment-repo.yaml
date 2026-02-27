@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "piston.fullname" . }}-repo
+  labels:
+    app: {{ include "piston.name" . }}
+    component: repo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "piston.name" . }}
+      component: repo
+  template:
+    metadata:
+      labels:
+        app: {{ include "piston.name" . }}
+        component: repo
+    spec:
+      containers:
+        - name: repo
+          image: "{{ .Values.image.repositoryRepo }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.repo.targetPort }}
+          resources:
+{{ toYaml .Values.resources.repo | indent 12 }}
+          volumeMounts:
+            - name: piston-data
+              mountPath: /piston
+      volumes:
+        - name: piston-data
+          persistentVolumeClaim:
+            claimName: {{ include "piston.fullname" . }}-repo-pvc
