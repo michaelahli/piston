@@ -2,7 +2,7 @@ version: "3.2"
 
 services:
   api:
-    build: api
+    image: ghcr.io/michaelahli/piston-api:v0.0.1
     container_name: piston_api
     privileged: true
     restart: always
@@ -12,7 +12,7 @@ services:
       - ./data/piston/packages:/piston/packages
 
   repo:
-    build: repo
+    image: ghcr.io/michaelahli/piston-repo:v0.0.1
     container_name: piston_repo
     command: ["--no-build"]
     volumes:
