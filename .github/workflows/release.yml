@@ -1,0 +1,45 @@
+name: Publish piston images
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build & push api
+        uses: docker/build-push-action@v4
+        with:
+          context: api
+          push: true
+          pull: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/piston-api:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/piston-api:latest
+
+      - name: build & push repo
+        uses: docker/build-push-action@v4
+        with:
+          context: repo
+          push: true
+          pull: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/piston-repo:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/piston-repo:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
