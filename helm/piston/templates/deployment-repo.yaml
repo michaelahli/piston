@@ -1,16 +1,29 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "piston.fullname" . }}-repo
   labels:
     app: {{ include "piston.name" . }}
     component: repo
 spec:
+  serviceName: {{ include "piston.fullname" . }}-repo
   replicas: 1
   selector:
     matchLabels:
       app: {{ include "piston.name" . }}
       component: repo
+  volumeClaimTemplates:
+    - metadata:
+        name: piston-data
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.sizeRepo }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
   template:
     metadata:
       labels:
@@ -80,9 +93,6 @@ spec:
               mountPath: /piston
 {{- end }}
       volumes:
-        - name: piston-data
-          persistentVolumeClaim:
-            claimName: {{ include "piston.fullname" . }}-repo-pvc
         - name: cgroup
           hostPath:
             path: /sys/fs/cgroup

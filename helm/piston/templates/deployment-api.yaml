@@ -1,16 +1,29 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "piston.fullname" . }}-api
   labels:
     app: {{ include "piston.name" . }}
     component: api
 spec:
+  serviceName: {{ include "piston.fullname" . }}-api
   replicas: {{ .Values.replicaCountApi }}
   selector:
     matchLabels:
       app: {{ include "piston.name" . }}
       component: api
+  volumeClaimTemplates:
+    - metadata:
+        name: packages
+      spec:
+        accessModes:
+          - {{ .Values.persistence.accessMode }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.sizeApi }}
+        {{- if .Values.persistence.storageClass }}
+        storageClassName: {{ .Values.persistence.storageClass }}
+        {{- end }}
   template:
     metadata:
       labels:
@@ -42,9 +55,6 @@ spec:
               mountPath: /sys/fs/cgroup
               readOnly: false
       volumes:
-        - name: packages
-          persistentVolumeClaim:
-            claimName: {{ include "piston.fullname" . }}-api-pvc
         - name: cgroup
           hostPath:
             path: /sys/fs/cgroup

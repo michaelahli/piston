@@ -53,3 +53,5 @@ security:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+useStateful: true
