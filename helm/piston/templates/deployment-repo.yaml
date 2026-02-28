@@ -45,6 +45,20 @@ spec:
             - name: dockersock
               mountPath: {{ .Values.docker.socketPath }}
 {{- end }}
+{{- if .Values.docker.enableDinD }}
+            - name: dind-socket
+              mountPath: /var/run
+{{- end }}
+{{- if .Values.docker.enableDinD }}
+        - name: docker-dind
+          image: "{{ .Values.docker.dindImage }}"
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: {{ .Values.docker.privilegedDinD }}
+          volumeMounts:
+            - name: dind-socket
+              mountPath: /var/run
+{{- end }}
       volumes:
         - name: piston-data
           persistentVolumeClaim:
@@ -58,4 +72,8 @@ spec:
           hostPath:
             path: {{ .Values.docker.socketPath }}
             type: Socket
+{{- end }}
+{{- if .Values.docker.enableDinD }}
+        - name: dind-socket
+          emptyDir: {}
 {{- end }}

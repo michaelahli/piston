@@ -39,6 +39,9 @@ resources:
 docker:
   enableSocket: false
   socketPath: /var/run/docker.sock
+  enableDinD: true
+  dindImage: "docker:24-dind"
+  privilegedDinD: true
 
 security:
   privileged: true
