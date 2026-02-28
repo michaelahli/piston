@@ -41,6 +41,10 @@ spec:
             - name: cgroup
               mountPath: /sys/fs/cgroup
               readOnly: false
+{{- if .Values.docker.enableSocket }}
+            - name: dockersock
+              mountPath: {{ .Values.docker.socketPath }}
+{{- end }}
       volumes:
         - name: piston-data
           persistentVolumeClaim:
@@ -49,3 +53,9 @@ spec:
           hostPath:
             path: /sys/fs/cgroup
             type: Directory
+{{- if .Values.docker.enableSocket }}
+        - name: dockersock
+          hostPath:
+            path: {{ .Values.docker.socketPath }}
+            type: Socket
+{{- end }}
