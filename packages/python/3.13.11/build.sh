@@ -6,7 +6,7 @@ mkdir -p build
 
 cd build
 
-curl "https://www.python.org/ftp/python/3.13.9/Python-3.13.9.tgz" -o python.tar.gz
+curl "https://www.python.org/ftp/python/3.13.11/Python-3.13.11.tgz" -o python.tar.gz
 tar xzf python.tar.gz --strip-components=1
 rm python.tar.gz
 
@@ -21,6 +21,6 @@ cd ..
 
 rm -rf build
 
-pip install numpy pandas requests aiohttp tqdm loguru \
-  beautifulsoup4 lxml sqlalchemy pymongo \
-  pyarrow fastparquet polars
+pip install numpy pandas scipy scikit-learn xgboost lightgbm catboost \
+  torch --index-url https://download.pytorch.org/whl/cpu \
+  tensorflow-cpu optuna mlflow pyarrow
