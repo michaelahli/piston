@@ -4,9 +4,9 @@
 
 replicaCountApi: 2
 
-# environment variables for each component (map of name:value)
 env:
-  api: {}
+  api:
+    PISTON_REPO_URL: "http://rce-piston-repo.rce.svc.cluster.local:8000/index"
   repo: {}
 
 image:
@@ -36,10 +36,9 @@ resources:
   api: {}
   repo: {}
 
-# security settings
 security:
-  privileged: true # whether containers run privileged (needed for isolate/cgroup)
-  hostPID: true # share host PID namespace (required for cgroup modifications)
+  privileged: true
+  hostPID: true
 
 nodeSelector: {}
 tolerations: []
