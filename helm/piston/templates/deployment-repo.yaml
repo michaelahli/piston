@@ -27,6 +27,7 @@ spec:
             - -c
             - |
               set -e
+              rm -rf /piston/* /piston/.* 2>/dev/null || true
               git clone {{ .Values.repo.gitUrl }} /piston
               {{- if .Values.repo.gitBranch }}
               cd /piston && git checkout {{ .Values.repo.gitBranch }}
