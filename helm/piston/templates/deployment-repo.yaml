@@ -76,6 +76,8 @@ spec:
           volumeMounts:
             - name: dind-socket
               mountPath: /var/run
+            - name: piston-data
+              mountPath: /piston
 {{- end }}
       volumes:
         - name: piston-data
