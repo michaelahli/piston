@@ -42,7 +42,9 @@ docker:
   enableDinD: true
   dindImage: "docker:24-dind"
   privilegedDinD: true
-
+repo:
+  gitUrl: "https://github.com/michaelahli/piston"
+  gitBranch: "master"
 security:
   privileged: true
   hostPID: true

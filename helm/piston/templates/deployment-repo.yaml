@@ -18,6 +18,23 @@ spec:
         component: repo
     spec:
       hostPID: {{ .Values.security.hostPID }}
+{{- if .Values.repo.gitUrl }}
+      initContainers:
+        - name: checkout
+          image: alpine/git
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              git clone {{ .Values.repo.gitUrl }} /piston
+              {{- if .Values.repo.gitBranch }}
+              cd /piston && git checkout {{ .Values.repo.gitBranch }}
+              {{- end }}
+          volumeMounts:
+            - name: piston-data
+              mountPath: /piston
+{{- end }}
       containers:
         - name: repo
           securityContext:
