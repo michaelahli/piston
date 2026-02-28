@@ -4,6 +4,18 @@
 
 replicaCountApi: 2
 
+# environment variables for each component (map of name:value)
+env:
+  api:
+    PISTON_COMPILE_CPU_TIME: "1000000"
+    PISTON_COMPILE_TIMEOUT: "1000000"
+    PISTON_DISABLE_NETWORKING: "false"
+    PISTON_OUTPUT_MAX_SIZE: "2147483647"
+    PISTON_REPO_URL: "https://repository.piston.france.stoxlify.com/index"
+    PISTON_RUN_CPU_TIME: "300000"
+    PISTON_RUN_TIMEOUT: "300000"
+  repo: {}
+
 image:
   repositoryApi: "ghcr.io/michaelahli/piston-api"
   repositoryRepo: "ghcr.io/michaelahli/piston-repo"
@@ -30,6 +42,11 @@ persistence:
 resources:
   api: {}
   repo: {}
+
+# security settings
+security:
+  privileged: true # whether containers run privileged (needed for isolate/cgroup)
+  hostPID: true # share host PID namespace (required for cgroup modifications)
 
 nodeSelector: {}
 tolerations: []

@@ -17,18 +17,35 @@ spec:
         app: {{ include "piston.name" . }}
         component: repo
     spec:
+      hostPID: {{ .Values.security.hostPID }}
       containers:
         - name: repo
+          securityContext:
+            privileged: {{ .Values.security.privileged }}
           image: "{{ .Values.image.repositoryRepo }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.repo.targetPort }}
+          env:
+{{- if .Values.env.repo }}
+{{- range $name, $value := .Values.env.repo }}
+            - name: {{ $name }}
+              value: "{{ $value }}"
+{{- end }}
+{{- end }}
           resources:
 {{ toYaml .Values.resources.repo | indent 12 }}
           volumeMounts:
             - name: piston-data
               mountPath: /piston
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: false
       volumes:
         - name: piston-data
           persistentVolumeClaim:
             claimName: {{ include "piston.fullname" . }}-repo-pvc
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory

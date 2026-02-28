@@ -17,18 +17,35 @@ spec:
         app: {{ include "piston.name" . }}
         component: api
     spec:
+      hostPID: {{ .Values.security.hostPID }}
       containers:
         - name: api
+          securityContext:
+            privileged: {{ .Values.security.privileged }}
           image: "{{ .Values.image.repositoryApi }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.api.targetPort }}
+          env:
+{{- if .Values.env.api }}
+{{- range $name, $value := .Values.env.api }}
+            - name: {{ $name }}
+              value: "{{ $value }}"
+{{- end }}
+{{- end }}
           resources:
 {{ toYaml .Values.resources.api | indent 12 }}
           volumeMounts:
             - name: packages
               mountPath: /piston/packages
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+              readOnly: false
       volumes:
         - name: packages
           persistentVolumeClaim:
             claimName: {{ include "piston.fullname" . }}-api-pvc
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+            type: Directory
