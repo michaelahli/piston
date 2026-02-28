@@ -21,6 +21,6 @@ cd ..
 
 rm -rf build
 
-pip install numpy pandas scipy scikit-learn xgboost lightgbm catboost \
+pip install openstoxlify numpy pandas scipy scikit-learn xgboost lightgbm catboost \
   torch --index-url https://download.pytorch.org/whl/cpu \
   tensorflow-cpu optuna mlflow pyarrow

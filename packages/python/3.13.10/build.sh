@@ -21,6 +21,6 @@ cd ..
 
 rm -rf build
 
-pip install numpy pandas scipy scikit-learn statsmodels \
+pip install openstoxlify numpy pandas scipy scikit-learn statsmodels \
   numba joblib ta arch yfinance ccxt alpaca-trade-api \
   backtesting quantstats pyarrow polars tqdm loguru requests aiohttp

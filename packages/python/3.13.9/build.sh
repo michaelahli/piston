@@ -21,6 +21,6 @@ cd ..
 
 rm -rf build
 
-pip install numpy pandas requests aiohttp tqdm loguru \
+pip install openstoxlify numpy pandas requests aiohttp tqdm loguru \
   beautifulsoup4 lxml sqlalchemy pymongo \
   pyarrow fastparquet polars

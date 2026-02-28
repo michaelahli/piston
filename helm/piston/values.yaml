@@ -6,8 +6,9 @@ replicaCountApi: 2
 
 env:
   api:
-    PISTON_REPO_URL: "http://rce-piston-repo.rce.svc.cluster.local:8000/index"
-  repo: {}
+    PISTON_REPO_URL: "http://rce-piston-repo:8000/index"
+  repo:
+    BASEURL: "http://rce-piston-repo:8000/"
 
 image:
   repositoryApi: "ghcr.io/michaelahli/piston-api"

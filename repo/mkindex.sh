@@ -1,4 +1,5 @@
-BASEURL=http://repo:8000/
+# allow overriding via environment variable (useful when running in k8s)
+BASEURL=${BASEURL:-http://rce-piston-repo:8000/}
 
 i=0
 
