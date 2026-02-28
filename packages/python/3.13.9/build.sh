@@ -21,6 +21,11 @@ cd ..
 
 rm -rf build
 
-bin/pip3 install openstoxlify numpy pandas requests aiohttp tqdm loguru \
+bin/pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+
+bin/pip3 install openstoxlify pandas numpy requests aiohttp tqdm loguru \
   beautifulsoup4 lxml sqlalchemy pymongo \
-  pyarrow fastparquet polars
+  pyarrow fastparquet polars scipy scikit-learn statsmodels \
+  numba joblib ta arch yfinance ccxt \
+  backtesting quantstats pyarrow polars tqdm loguru requests aiohttp \
+  xgboost lightgbm catboost tensorflow-cpu optuna mlflow pyarrow
