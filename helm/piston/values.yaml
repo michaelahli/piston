@@ -18,10 +18,12 @@ image:
 
 service:
   api:
+    annotations: {}
     port: 2000
     targetPort: 2000
     type: ClusterIP
   repo:
+    annotations: {}
     port: 8000
     targetPort: 8000
     type: ClusterIP

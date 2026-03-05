@@ -5,6 +5,10 @@ metadata:
   labels:
     app: {{ include "piston.name" . }}
     component: api
+  {{- if .Values.service.api.annotations }}
+  annotations:
+{{ toYaml .Values.service.api.annotations | indent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.api.type }}
   ports:
