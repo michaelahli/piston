@@ -31,7 +31,15 @@ service:
 persistence:
   enabled: true
   storageClass: ""
+  # accessMode will be applied to both API and repo volumes. For a shared
+  # read-write-many volume, set this to ReadWriteMany and enable
+  # `shared` below.
   accessMode: ReadWriteOnce
+  # If true, the API deployment/statefulset will use a single persistent
+  # volume claim (created by pvc-api.yaml) that is mounted by every replica.
+  # This is intended for RWX storage classes. When false (default) each
+  # replica gets its own PVC via volumeClaimTemplates.
+  shared: false
   sizeApi: 50Gi
   sizeRepo: 50Gi
 

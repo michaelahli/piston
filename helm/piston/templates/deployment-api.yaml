@@ -12,6 +12,7 @@ spec:
     matchLabels:
       app: {{ include "piston.name" . }}
       component: api
+{{- if not .Values.persistence.shared }}
   volumeClaimTemplates:
     - metadata:
         name: packages
@@ -24,6 +25,7 @@ spec:
         {{- if .Values.persistence.storageClass }}
         storageClassName: {{ .Values.persistence.storageClass }}
         {{- end }}
+{{- end }}
   template:
     metadata:
       labels:
@@ -55,6 +57,11 @@ spec:
               mountPath: /sys/fs/cgroup
               readOnly: false
       volumes:
+{{- if .Values.persistence.shared }}
+        - name: packages
+          persistentVolumeClaim:
+            claimName: {{ include "piston.fullname" . }}-api-pvc
+{{- end }}
         - name: cgroup
           hostPath:
             path: /sys/fs/cgroup
